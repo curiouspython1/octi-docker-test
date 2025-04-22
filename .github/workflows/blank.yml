@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run a multi-line script
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl git jq
+          sudo install -m 0755 -d /etc/apt/keyrings
+          sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+          sudo chmod a+r /etc/apt/keyrings/docker.asc
+          
+          # Add the repository to Apt sources:
+          echo \
+            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+            $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+            sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          sudo apt-get update
+
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+          git clone https://github.com/OpenCTI-Platform/docker
+          cd docker
+
+          sudo apt install -y jq
+          #cd ~/docker
+          
+          (cat << EOF
+          OPENCTI_ADMIN_EMAIL=admin@opencti.io
+          OPENCTI_ADMIN_PASSWORD=ChangeMePlease
+          OPENCTI_ADMIN_TOKEN=$(cat /proc/sys/kernel/random/uuid)
+          OPENCTI_BASE_URL=http://localhost:8080
+          OPENCTI_HEALTHCHECK_ACCESS_KEY=$(cat /proc/sys/kernel/random/uuid)
+          MINIO_ROOT_USER=$(cat /proc/sys/kernel/random/uuid)
+          MINIO_ROOT_PASSWORD=$(cat /proc/sys/kernel/random/uuid)
+          RABBITMQ_DEFAULT_USER=guest
+          RABBITMQ_DEFAULT_PASS=guest
+          ELASTIC_MEMORY_SIZE=4G
+          CONNECTOR_HISTORY_ID=$(cat /proc/sys/kernel/random/uuid)
+          CONNECTOR_EXPORT_FILE_STIX_ID=$(cat /proc/sys/kernel/random/uuid)
+          CONNECTOR_EXPORT_FILE_CSV_ID=$(cat /proc/sys/kernel/random/uuid)
+          CONNECTOR_IMPORT_FILE_STIX_ID=$(cat /proc/sys/kernel/random/uuid)
+          CONNECTOR_EXPORT_FILE_TXT_ID=$(cat /proc/sys/kernel/random/uuid)
+          CONNECTOR_IMPORT_DOCUMENT_ID=$(cat /proc/sys/kernel/random/uuid)
+          CONNECTOR_ANALYSIS_ID=$(cat /proc/sys/kernel/random/uuid)
+          SMTP_HOSTNAME=localhost
+          EOF
+          ) > .env
+          
+          sudo sysctl -w vm.max_map_count=1048575
+
+          docker compose up -d
+          sleep 60
+          
+          docker logs docker-opencti-1
+
+          docker compose down --remove-orphans
